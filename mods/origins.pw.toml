@@ -1,0 +1,13 @@
+name = "Origins"
+filename = "Origins-1.10.2+mc.1.20.x.jar"
+side = "both"
+
+[download]
+url = "https://cdn.modrinth.com/data/3BeIrqZR/versions/oT0CGnBQ/Origins-1.10.2%2Bmc.1.20.x.jar"
+hash-format = "sha512"
+hash = "d68d6be3c092619ecd80e4e9049616acc19359b9764bc776ad2fbd00112f6bd651996cdccc6008d87022bdf3929f55250bf348659f9c42bdba3bbc627d041fa7"
+
+[update]
+[update.modrinth]
+mod-id = "3BeIrqZR"
+version = "oT0CGnBQ"

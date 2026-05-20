@@ -1,0 +1,13 @@
+name = "Ritchie's Projectile Library"
+filename = "ritchiesprojectilelib-2.1.1+mc.1.20.1-fabric.jar"
+side = "both"
+
+[download]
+url = "https://cdn.modrinth.com/data/B3pb093D/versions/OHbO1aoO/ritchiesprojectilelib-2.1.1%2Bmc.1.20.1-fabric.jar"
+hash-format = "sha512"
+hash = "5867f21105721f7aa530341d0aabddbf12fb507238ce1d7c8db22559d10f5bfd3e7e5543f134fb84701c054f09235edf14096a371039fa7abb1d7b8d6e43c3c2"
+
+[update]
+[update.modrinth]
+mod-id = "B3pb093D"
+version = "OHbO1aoO"

@@ -1,0 +1,96 @@
+hash-format = "sha256"
+
+[[files]]
+file = "mods/all-the-mrcrayfish-s-mods-fabric.pw.toml"
+hash = "6a96fc4bc550e195574b832785a3762c1a69fec82cba0da52625d0207a5e769e"
+metafile = true
+
+[[files]]
+file = "mods/automodpack.pw.toml"
+hash = "23a94d6826d3675690e27246c26ce049873717753c901894a1e17fda6c989d2f"
+metafile = true
+
+[[files]]
+file = "mods/comforts.pw.toml"
+hash = "b4fdf52d53ab71bf73282c5168e9526b6024740d82388d604d6947394e3c7f7f"
+metafile = true
+
+[[files]]
+file = "mods/create-big-cannons.pw.toml"
+hash = "ea86b024eacf238d7d52aaddb797d70ee4a4cfa39071ecdd796ceb3b5e838835"
+metafile = true
+
+[[files]]
+file = "mods/create-fabric.pw.toml"
+hash = "f76188c6e4714a70ea367d7f7a566b05c935a9f19e23f0352f4eb0271a985376"
+metafile = true
+
+[[files]]
+file = "mods/create-steam-n-rails.pw.toml"
+hash = "c53b1bcd1e917d8083aba91ed85eefa2d462b6caa37f297e35e11df51bc96c5f"
+metafile = true
+
+[[files]]
+file = "mods/cultural-delights-fabric.pw.toml"
+hash = "419bfd63bc351527f11cb16f22734f1c6419e7c511fb2597e6bdebc4c9beda59"
+metafile = true
+
+[[files]]
+file = "mods/explorers-compass.pw.toml"
+hash = "a2552d139e6d8ca2b0c95499503d374e5741a68d30b5db353deebe2a1e2e7e56"
+metafile = true
+
+[[files]]
+file = "mods/fabric-api.pw.toml"
+hash = "d9f5084f3684add4a72eac5500df626a92e5e36eda54d9527ad1da0a16c2060a"
+metafile = true
+
+[[files]]
+file = "mods/fabric-language-kotlin.pw.toml"
+hash = "337d97b990f76c91584b12600651ae7bd47a0824e45070b3d9330b0922149fc0"
+metafile = true
+
+[[files]]
+file = "mods/farmers-delight-refabricated.pw.toml"
+hash = "e09385ac1a1c0900b8fa619290eb0f0539949ebbc59f7604a7699485784ccc85"
+metafile = true
+
+[[files]]
+file = "mods/icommon.pw.toml"
+hash = "44ecb5c09a3810f6c605f4e403e3c42c0ee40da91ccd3748d9a02fee746f6ce3"
+metafile = true
+
+[[files]]
+file = "mods/immersive-aircraft.pw.toml"
+hash = "ca3ca3f51541688c45a81c541ff46660853106ebda282dfd59da00f5c9c0a9cd"
+metafile = true
+
+[[files]]
+file = "mods/multiworld.pw.toml"
+hash = "9cdb9afcd62b26e5645794f9bca080f00850ca68ed48226cb7cc1a944da7169e"
+metafile = true
+
+[[files]]
+file = "mods/oceans-delight.pw.toml"
+hash = "0cd69add62e07381eacd3abf2a9188b1a0e2648ab92ebefe82d93ffd229ddbca"
+metafile = true
+
+[[files]]
+file = "mods/origins-dietary-delights.pw.toml"
+hash = "faaa758dd45c60f751b075cdc3f6ba977f0e964e5cd28a2366f9173393020c90"
+metafile = true
+
+[[files]]
+file = "mods/origins.pw.toml"
+hash = "faadbd329bd9b454d469c4ebdbcee1aa718b922c86ba68db8284152cb28ecf75"
+metafile = true
+
+[[files]]
+file = "mods/rpl.pw.toml"
+hash = "8283001de6699f5d588e4f0105e4e0e38b26ecde6cccf372372c1f0e698275c2"
+metafile = true
+
+[[files]]
+file = "mods/slice-and-dice.pw.toml"
+hash = "6d9a8dac0aeb4cd4776d64a7ef3cca3842073cfcab8e6ea431653b98954f5a4d"
+metafile = true
