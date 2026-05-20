@@ -1,16 +1,6 @@
 hash-format = "sha256"
 
 [[files]]
-file = "mods/all-the-mrcrayfish-s-mods-fabric.pw.toml"
-hash = "6a96fc4bc550e195574b832785a3762c1a69fec82cba0da52625d0207a5e769e"
-metafile = true
-
-[[files]]
-file = "mods/automodpack.pw.toml"
-hash = "23a94d6826d3675690e27246c26ce049873717753c901894a1e17fda6c989d2f"
-metafile = true
-
-[[files]]
 file = "mods/comforts.pw.toml"
 hash = "b4fdf52d53ab71bf73282c5168e9526b6024740d82388d604d6947394e3c7f7f"
 metafile = true
