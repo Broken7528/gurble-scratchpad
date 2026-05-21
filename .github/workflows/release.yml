@@ -1,0 +1,202 @@
+name: Build and Release Modpack
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: stable
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Install packwiz
+        run: go install github.com/packwiz/packwiz@latest
+
+      - name: Read pack metadata
+        id: pack
+        run: |
+          NAME=$(awk -F' *= *' '/^name *=/ {gsub(/"/, "", $2); print $2; exit}' pack.toml)
+          VERSION=$(awk -F' *= *' '/^version *=/ {gsub(/"/, "", $2); print $2; exit}' pack.toml)
+          MC=$(awk -F' *= *' '/^minecraft *=/ {gsub(/"/, "", $2); print $2; exit}' pack.toml)
+          FABRIC=$(awk -F' *= *' '/^fabric *=/ {gsub(/"/, "", $2); print $2; exit}' pack.toml)
+          BASE="${NAME}-${VERSION}"
+          {
+            echo "name=${NAME}"
+            echo "version=${VERSION}"
+            echo "mc=${MC}"
+            echo "fabric=${FABRIC}"
+            echo "tag=v${VERSION}-${GITHUB_RUN_NUMBER}"
+            echo "base=${BASE}"
+            echo "mrpack=${BASE}-client-modrinth.mrpack"
+            echo "cfzip=${BASE}-client-curseforge.zip"
+            echo "server_bundled=${BASE}-server-bundled.zip"
+            echo "server_bootstrap=${BASE}-server-bootstrap.zip"
+          } >>"$GITHUB_OUTPUT"
+
+      - name: Refresh packwiz index
+        run: packwiz refresh
+
+      # ---------- CLIENT BUILDS ----------
+
+      - name: Export client (Modrinth .mrpack)
+        run: packwiz modrinth export -o "${{ steps.pack.outputs.mrpack }}"
+
+      - name: Export client (CurseForge .zip)
+        # Some mods may be Modrinth-only; packwiz places them in overrides/.
+        # If a mod has neither CF nor Modrinth metadata this step will fail loudly.
+        run: packwiz curseforge export -o "${{ steps.pack.outputs.cfzip }}"
+
+      # ---------- SHARED SERVER SETUP ----------
+
+      - name: Download Fabric server launcher
+        env:
+          MC: ${{ steps.pack.outputs.mc }}
+          FABRIC: ${{ steps.pack.outputs.fabric }}
+        run: |
+          set -euo pipefail
+          FABRIC_INSTALLER_VERSION=$(curl -fsSL https://meta.fabricmc.net/v2/versions/installer \
+            | python3 -c "import json,sys; print(next(v['version'] for v in json.load(sys.stdin) if v.get('stable')))")
+          curl -fsSL -o fabric-server-launch.jar \
+            "https://meta.fabricmc.net/v2/versions/loader/${MC}/${FABRIC}/${FABRIC_INSTALLER_VERSION}/server/jar"
+
+      - name: Download packwiz-installer-bootstrap
+        run: |
+          set -euo pipefail
+          BOOTSTRAP_VERSION="0.0.3"
+          curl -fsSL -o packwiz-installer-bootstrap.jar \
+            "https://github.com/packwiz/packwiz-installer-bootstrap/releases/download/v${BOOTSTRAP_VERSION}/packwiz-installer-bootstrap.jar"
+
+      # ---------- SERVER: BUNDLED (mods pre-installed, works offline) ----------
+
+      - name: Build server zip (bundled)
+        env:
+          OUT: ${{ steps.pack.outputs.server_bundled }}
+        run: |
+          set -euo pipefail
+          mkdir -p server-bundled
+          cp pack.toml index.toml server-bundled/
+          for d in mods config resourcepacks shaderpacks plugins kubejs scripts; do
+            [ -d "$d" ] && cp -r "$d" "server-bundled/"
+          done
+          cp fabric-server-launch.jar server-bundled/
+          cp packwiz-installer-bootstrap.jar server-bundled/
+
+          cd server-bundled
+          java -jar packwiz-installer-bootstrap.jar -g -s server pack.toml
+
+          cat > start.sh <<'EOF'
+          #!/usr/bin/env bash
+          java -Xmx4G -Xms2G -jar fabric-server-launch.jar nogui
+          EOF
+          chmod +x start.sh
+
+          cat > start.bat <<'EOF'
+          @echo off
+          java -Xmx4G -Xms2G -jar fabric-server-launch.jar nogui
+          pause
+          EOF
+
+          cat > eula.txt <<'EOF'
+          # By changing this to true you agree to the Mojang EULA: https://aka.ms/MinecraftEULA
+          eula=false
+          EOF
+
+          # Strip packwiz metadata — jars are already downloaded.
+          rm -f pack.toml index.toml packwiz-installer-bootstrap.jar packwiz-installer.jar
+          find . -name '*.pw.toml' -delete
+          find . -type d -empty -delete
+
+          cd ..
+          (cd server-bundled && zip -r "../${OUT}" .)
+
+      # ---------- SERVER: BOOTSTRAP (small zip, syncs from this repo on launch) ----------
+
+      - name: Build server zip (bootstrap)
+        env:
+          OUT: ${{ steps.pack.outputs.server_bootstrap }}
+          PACK_URL: https://raw.githubusercontent.com/${{ github.repository }}/${{ github.sha }}/pack.toml
+        run: |
+          set -euo pipefail
+          mkdir -p server-bootstrap
+          cp fabric-server-launch.jar server-bootstrap/
+          cp packwiz-installer-bootstrap.jar server-bootstrap/
+
+          cat > server-bootstrap/start.sh <<EOF
+          #!/usr/bin/env bash
+          set -e
+          java -jar packwiz-installer-bootstrap.jar -g -s server "${PACK_URL}"
+          java -Xmx4G -Xms2G -jar fabric-server-launch.jar nogui
+          EOF
+          chmod +x server-bootstrap/start.sh
+
+          cat > server-bootstrap/start.bat <<EOF
+          @echo off
+          java -jar packwiz-installer-bootstrap.jar -g -s server "${PACK_URL}"
+          if errorlevel 1 goto :end
+          java -Xmx4G -Xms2G -jar fabric-server-launch.jar nogui
+          :end
+          pause
+          EOF
+
+          cat > server-bootstrap/eula.txt <<'EOF'
+          # By changing this to true you agree to the Mojang EULA: https://aka.ms/MinecraftEULA
+          eula=false
+          EOF
+
+          cat > server-bootstrap/README.txt <<EOF
+          Bootstrap server for ${{ steps.pack.outputs.name }} ${{ steps.pack.outputs.version }}
+
+          On first launch (and every subsequent launch) start.sh / start.bat will:
+            1. Sync mods + configs from ${PACK_URL}
+            2. Launch the Fabric server
+
+          Set eula=true in eula.txt before running.
+          EOF
+
+          (cd server-bootstrap && zip -r "../${OUT}" .)
+
+      # ---------- RELEASE ----------
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.pack.outputs.tag }}
+          name: ${{ steps.pack.outputs.name }} ${{ steps.pack.outputs.tag }}
+          body: |
+            Automated build from commit ${{ github.sha }}.
+
+            - Minecraft: ${{ steps.pack.outputs.mc }}
+            - Fabric loader: ${{ steps.pack.outputs.fabric }}
+
+            **Pick your download:**
+
+            | File | For | Notes |
+            |---|---|---|
+            | `*-client-modrinth.mrpack` | Modrinth App, Prism, ATLauncher, MultiMC | Recommended client format |
+            | `*-client-curseforge.zip` | CurseForge / Overwolf launcher | Modrinth-only mods land in `overrides/` |
+            | `*-server-bundled.zip` | Self-hosted server, offline-friendly | All mods pre-downloaded |
+            | `*-server-bootstrap.zip` | Self-hosted server, auto-updating | Syncs from this repo on each launch |
+
+            Servers: set `eula=true` in `eula.txt` before running `start.sh` / `start.bat`.
+          files: |
+            ${{ steps.pack.outputs.mrpack }}
+            ${{ steps.pack.outputs.cfzip }}
+            ${{ steps.pack.outputs.server_bundled }}
+            ${{ steps.pack.outputs.server_bootstrap }}
