@@ -1,6 +1,11 @@
 hash-format = "sha256"
 
 [[files]]
+file = "mods/axiom.pw.toml"
+hash = "5f7ed638f44067c2e452e6eebf44efd6ae13f0dcc9242e0c77958f8aebfc45fe"
+metafile = true
+
+[[files]]
 file = "mods/comforts.pw.toml"
 hash = "b4fdf52d53ab71bf73282c5168e9526b6024740d82388d604d6947394e3c7f7f"
 metafile = true
@@ -87,5 +92,5 @@ metafile = true
 
 [[files]]
 file = "mods/worldedit.pw.toml"
-hash = "bd1dc13316e2aa9b56c89e7e974057f8da8d6bbfe707ba4210109fc612b782e3"
+hash = "54de89d1d0465e74210cd8f0f7893454066e7d8368d751f7dcd2cef838d11505"
 metafile = true
