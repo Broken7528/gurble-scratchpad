@@ -19,7 +19,7 @@
 # USER CONFIGURATION -- edit these lines
 # -----------------------------------------------------------------------------
 
-$PackUrl          = "https://raw.githubusercontent.com/Broken7528/gurble-scratchpad/main/pack.toml"
+$PackUrl          = "https://raw.githubusercontent.com/Broken7528/gurble-scratchpad/main/gurblecraft/pack.toml"
 $BootstrapVersion = "0.0.3"
 
 # -----------------------------------------------------------------------------

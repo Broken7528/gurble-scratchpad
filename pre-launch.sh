@@ -4,7 +4,7 @@
 
 set -euo pipefail
 
-PACK_URL="https://raw.githubusercontent.com/Broken7528/gurble-scratchpad/main/pack.toml"
+PACK_URL="https://raw.githubusercontent.com/Broken7528/gurble-scratchpad/main/gurblecraft/pack.toml"
 BOOTSTRAP_VERSION="0.0.3"
 BOOTSTRAP_URL="https://github.com/packwiz/packwiz-installer-bootstrap/releases/download/v${BOOTSTRAP_VERSION}/packwiz-installer-bootstrap.jar"
 
