@@ -1,0 +1,71 @@
+name: Update Modpack Mods
+
+on:
+  schedule:
+    # Weekly on Monday 03:00 UTC. Adjust to taste.
+    - cron: '0 3 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  discover:
+    name: Discover modpacks
+    runs-on: ubuntu-latest
+    outputs:
+      modpacks: ${{ steps.list.outputs.modpacks }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: list
+        run: |
+          folders=()
+          for f in */; do
+            f="${f%/}"
+            [ -f "$f/pack.toml" ] && folders+=("$f")
+          done
+          json=$(jq --compact-output --null-input '$ARGS.positional' --args -- "${folders[@]}")
+          echo "modpacks=$json" >>"$GITHUB_OUTPUT"
+          echo "::notice::Detected modpacks: $json"
+
+  update:
+    name: Update ${{ matrix.modpack }}
+    needs: discover
+    if: needs.discover.outputs.modpacks != '[]'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        modpack: ${{ fromJson(needs.discover.outputs.modpacks) }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: stable
+
+      - name: Install packwiz
+        run: go install github.com/packwiz/packwiz@latest
+
+      - name: Update mods
+        working-directory: ${{ matrix.modpack }}
+        run: packwiz update -a -y
+
+      - name: Refresh index
+        working-directory: ${{ matrix.modpack }}
+        run: packwiz refresh
+
+      - name: Open PR with updates
+        uses: peter-evans/create-pull-request@v6
+        with:
+          commit-message: "update(${{ matrix.modpack }}): refresh mods"
+          title: "update(${{ matrix.modpack }}): refresh mods"
+          branch: auto-update/${{ matrix.modpack }}
+          delete-branch: true
+          add-paths: |
+            ${{ matrix.modpack }}/**
+          body: |
+            Automated mod update via `packwiz update -a -y` on `${{ matrix.modpack }}`.
+
+            Review the diff to see which mods changed. Merge to roll the updates into the next release build.

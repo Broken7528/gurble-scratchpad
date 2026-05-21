@@ -84,3 +84,8 @@ metafile = true
 file = "mods/slice-and-dice.pw.toml"
 hash = "6d9a8dac0aeb4cd4776d64a7ef3cca3842073cfcab8e6ea431653b98954f5a4d"
 metafile = true
+
+[[files]]
+file = "mods/worldedit.pw.toml"
+hash = "bd1dc13316e2aa9b56c89e7e974057f8da8d6bbfe707ba4210109fc612b782e3"
+metafile = true

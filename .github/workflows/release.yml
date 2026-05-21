@@ -1,4 +1,4 @@
-name: Build and Release Modpack
+name: Build and Release Modpacks
 
 on:
   push:
@@ -9,19 +9,42 @@ permissions:
   contents: write
 
 jobs:
-  build:
+  discover:
+    name: Discover modpacks
     runs-on: ubuntu-latest
+    outputs:
+      modpacks: ${{ steps.list.outputs.modpacks }}
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+      - name: List modpack folders
+        id: list
+        run: |
+          folders=()
+          for f in */; do
+            f="${f%/}"
+            [ -f "$f/pack.toml" ] && folders+=("$f")
+          done
+          json=$(jq --compact-output --null-input '$ARGS.positional' --args -- "${folders[@]}")
+          echo "modpacks=$json" >>"$GITHUB_OUTPUT"
+          echo "::notice::Detected modpacks: $json"
 
-      - name: Set up Go
-        uses: actions/setup-go@v5
+  build:
+    name: Build ${{ matrix.modpack }}
+    needs: discover
+    if: needs.discover.outputs.modpacks != '[]'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        modpack: ${{ fromJson(needs.discover.outputs.modpacks) }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
         with:
           go-version: stable
 
-      - name: Set up Java
-        uses: actions/setup-java@v4
+      - uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '17'
@@ -31,41 +54,58 @@ jobs:
 
       - name: Read pack metadata
         id: pack
+        working-directory: ${{ matrix.modpack }}
         run: |
           NAME=$(awk -F' *= *' '/^name *=/ {gsub(/"/, "", $2); print $2; exit}' pack.toml)
           VERSION=$(awk -F' *= *' '/^version *=/ {gsub(/"/, "", $2); print $2; exit}' pack.toml)
           MC=$(awk -F' *= *' '/^minecraft *=/ {gsub(/"/, "", $2); print $2; exit}' pack.toml)
           FABRIC=$(awk -F' *= *' '/^fabric *=/ {gsub(/"/, "", $2); print $2; exit}' pack.toml)
           BASE="${NAME}-${VERSION}"
+          # Per-pack tag prefix avoids collisions across packs in the matrix.
+          TAG="${NAME}/v${VERSION}-${GITHUB_RUN_NUMBER}"
           {
             echo "name=${NAME}"
             echo "version=${VERSION}"
             echo "mc=${MC}"
             echo "fabric=${FABRIC}"
-            echo "tag=v${VERSION}-${GITHUB_RUN_NUMBER}"
+            echo "tag=${TAG}"
             echo "base=${BASE}"
             echo "mrpack=${BASE}-client-modrinth.mrpack"
             echo "cfzip=${BASE}-client-curseforge.zip"
-            echo "server_bundled=${BASE}-server-bundled.zip"
-            echo "server_bootstrap=${BASE}-server-bootstrap.zip"
+            echo "server=${BASE}-server.zip"
           } >>"$GITHUB_OUTPUT"
 
       - name: Refresh packwiz index
+        working-directory: ${{ matrix.modpack }}
         run: packwiz refresh
 
       # ---------- CLIENT BUILDS ----------
 
       - name: Export client (Modrinth .mrpack)
+        working-directory: ${{ matrix.modpack }}
         run: packwiz modrinth export -o "${{ steps.pack.outputs.mrpack }}"
 
       - name: Export client (CurseForge .zip)
-        # Some mods may be Modrinth-only; packwiz places them in overrides/.
-        # If a mod has neither CF nor Modrinth metadata this step will fail loudly.
-        run: packwiz curseforge export -o "${{ steps.pack.outputs.cfzip }}"
+        # CF launchers (PolyMC/MultiMC) reject manifests with an empty `files` array,
+        # which is what packwiz produces when no mod has CurseForge metadata. In that
+        # case the CF zip is just a worse .mrpack (all jars in overrides/), so drop it.
+        working-directory: ${{ matrix.modpack }}
+        run: |
+          set -euo pipefail
+          packwiz curseforge export -o "${{ steps.pack.outputs.cfzip }}"
+          FILE_COUNT=$(unzip -p "${{ steps.pack.outputs.cfzip }}" manifest.json \
+            | python3 -c "import json,sys; print(len(json.load(sys.stdin).get('files', [])))")
+          if [ "$FILE_COUNT" = "0" ]; then
+            echo "::notice::No CurseForge-sourced mods in ${{ matrix.modpack }} — skipping CF artifact."
+            rm "${{ steps.pack.outputs.cfzip }}"
+          else
+            echo "CF zip contains $FILE_COUNT CurseForge mod entries."
+          fi
 
       # ---------- SHARED SERVER SETUP ----------
 
       - name: Download Fabric server launcher
+        working-directory: ${{ matrix.modpack }}
         env:
           MC: ${{ steps.pack.outputs.mc }}
           FABRIC: ${{ steps.pack.outputs.fabric }}
@@ -77,76 +117,35 @@ jobs:
             "https://meta.fabricmc.net/v2/versions/loader/${MC}/${FABRIC}/${FABRIC_INSTALLER_VERSION}/server/jar"
 
       - name: Download packwiz-installer-bootstrap
+        working-directory: ${{ matrix.modpack }}
         run: |
           set -euo pipefail
           BOOTSTRAP_VERSION="0.0.3"
           curl -fsSL -o packwiz-installer-bootstrap.jar \
             "https://github.com/packwiz/packwiz-installer-bootstrap/releases/download/v${BOOTSTRAP_VERSION}/packwiz-installer-bootstrap.jar"
 
-      # ---------- SERVER: BUNDLED (mods pre-installed, works offline) ----------
+      # ---------- SERVER (bootstrap: no jars bundled, syncs from this repo on launch) ----------
 
-      - name: Build server zip (bundled)
+      - name: Build server zip
+        working-directory: ${{ matrix.modpack }}
         env:
-          OUT: ${{ steps.pack.outputs.server_bundled }}
+          OUT: ${{ steps.pack.outputs.server }}
+          PACK_URL: https://raw.githubusercontent.com/${{ github.repository }}/${{ github.sha }}/${{ matrix.modpack }}/pack.toml
         run: |
           set -euo pipefail
-          mkdir -p server-bundled
-          cp pack.toml index.toml server-bundled/
-          for d in mods config resourcepacks shaderpacks plugins kubejs scripts; do
-            [ -d "$d" ] && cp -r "$d" "server-bundled/"
-          done
-          cp fabric-server-launch.jar server-bundled/
-          cp packwiz-installer-bootstrap.jar server-bundled/
+          mkdir -p server
+          cp fabric-server-launch.jar server/
+          cp packwiz-installer-bootstrap.jar server/
 
-          cd server-bundled
-          java -jar packwiz-installer-bootstrap.jar -g -s server pack.toml
-
-          cat > start.sh <<'EOF'
-          #!/usr/bin/env bash
-          java -Xmx4G -Xms2G -jar fabric-server-launch.jar nogui
-          EOF
-          chmod +x start.sh
-
-          cat > start.bat <<'EOF'
-          @echo off
-          java -Xmx4G -Xms2G -jar fabric-server-launch.jar nogui
-          pause
-          EOF
-
-          cat > eula.txt <<'EOF'
-          # By changing this to true you agree to the Mojang EULA: https://aka.ms/MinecraftEULA
-          eula=false
-          EOF
-
-          # Strip packwiz metadata — jars are already downloaded.
-          rm -f pack.toml index.toml packwiz-installer-bootstrap.jar packwiz-installer.jar
-          find . -name '*.pw.toml' -delete
-          find . -type d -empty -delete
-
-          cd ..
-          (cd server-bundled && zip -r "../${OUT}" .)
-
-      # ---------- SERVER: BOOTSTRAP (small zip, syncs from this repo on launch) ----------
-
-      - name: Build server zip (bootstrap)
-        env:
-          OUT: ${{ steps.pack.outputs.server_bootstrap }}
-          PACK_URL: https://raw.githubusercontent.com/${{ github.repository }}/${{ github.sha }}/pack.toml
-        run: |
-          set -euo pipefail
-          mkdir -p server-bootstrap
-          cp fabric-server-launch.jar server-bootstrap/
-          cp packwiz-installer-bootstrap.jar server-bootstrap/
-
-          cat > server-bootstrap/start.sh <<EOF
+          cat > server/start.sh <<EOF
           #!/usr/bin/env bash
           set -e
           java -jar packwiz-installer-bootstrap.jar -g -s server "${PACK_URL}"
           java -Xmx4G -Xms2G -jar fabric-server-launch.jar nogui
           EOF
-          chmod +x server-bootstrap/start.sh
+          chmod +x server/start.sh
 
-          cat > server-bootstrap/start.bat <<EOF
+          cat > server/start.bat <<EOF
           @echo off
           java -jar packwiz-installer-bootstrap.jar -g -s server "${PACK_URL}"
           if errorlevel 1 goto :end
@@ -155,22 +154,22 @@ jobs:
           pause
           EOF
 
-          cat > server-bootstrap/eula.txt <<'EOF'
+          cat > server/eula.txt <<'EOF'
           # By changing this to true you agree to the Mojang EULA: https://aka.ms/MinecraftEULA
           eula=false
           EOF
 
-          cat > server-bootstrap/README.txt <<EOF
-          Bootstrap server for ${{ steps.pack.outputs.name }} ${{ steps.pack.outputs.version }}
+          cat > server/README.txt <<EOF
+          Server for ${{ steps.pack.outputs.name }} ${{ steps.pack.outputs.version }}
 
-          On first launch (and every subsequent launch) start.sh / start.bat will:
+          On launch, start.sh / start.bat will:
             1. Sync mods + configs from ${PACK_URL}
             2. Launch the Fabric server
 
           Set eula=true in eula.txt before running.
           EOF
 
-          (cd server-bootstrap && zip -r "../${OUT}" .)
+          (cd server && zip -r "../${OUT}" .)
 
       # ---------- RELEASE ----------
 
@@ -178,25 +177,27 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.pack.outputs.tag }}
-          name: ${{ steps.pack.outputs.name }} ${{ steps.pack.outputs.tag }}
+          name: ${{ steps.pack.outputs.name }} ${{ steps.pack.outputs.version }} (build ${{ github.run_number }})
           body: |
-            Automated build from commit ${{ github.sha }}.
+            Automated build of **${{ steps.pack.outputs.name }}** from commit ${{ github.sha }}.
 
             - Minecraft: ${{ steps.pack.outputs.mc }}
             - Fabric loader: ${{ steps.pack.outputs.fabric }}
 
             **Pick your download:**
 
+            All artifacts are metadata-only — mod jars are fetched from their
+            original Modrinth / CurseForge URLs at install/launch time, so no
+            mods are redistributed.
+
             | File | For | Notes |
             |---|---|---|
             | `*-client-modrinth.mrpack` | Modrinth App, Prism, ATLauncher, MultiMC | Recommended client format |
-            | `*-client-curseforge.zip` | CurseForge / Overwolf launcher | Modrinth-only mods land in `overrides/` |
-            | `*-server-bundled.zip` | Self-hosted server, offline-friendly | All mods pre-downloaded |
-            | `*-server-bootstrap.zip` | Self-hosted server, auto-updating | Syncs from this repo on each launch |
+            | `*-client-curseforge.zip` | CurseForge / Overwolf launcher | Only present if pack has CF-hosted mods |
+            | `*-server.zip` | Self-hosted server | `start.sh` / `start.bat` syncs mods on each launch |
 
             Servers: set `eula=true` in `eula.txt` before running `start.sh` / `start.bat`.
           files: |
-            ${{ steps.pack.outputs.mrpack }}
-            ${{ steps.pack.outputs.cfzip }}
-            ${{ steps.pack.outputs.server_bundled }}
-            ${{ steps.pack.outputs.server_bootstrap }}
+            ${{ matrix.modpack }}/${{ steps.pack.outputs.mrpack }}
+            ${{ matrix.modpack }}/${{ steps.pack.outputs.cfzip }}
+            ${{ matrix.modpack }}/${{ steps.pack.outputs.server }}
