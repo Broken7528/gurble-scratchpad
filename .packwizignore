@@ -6,3 +6,5 @@
 /LICENSE
 /CNAME
 .github/workflows/*
+/pre-launch.ps1
+/pre-launch.sh
